@@ -1,0 +1,95 @@
+services:
+  # MYSQL
+  db:
+    container_name: ${APP_NAME}_db
+    image: mysql:8.4.4 
+    command: --lower_case_table_names=1
+    environment:
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD}
+    volumes:
+      - ./db:/var/lib/mysql
+      - ./docker-compose/mysql/my.cnf:/etc/mysql/conf.d/my.cnf  # Ruta corregida
+    ports:
+      - ${MYSQL_PORT}:3306
+    restart: on-failure
+    networks:
+      net:
+        ipv4_address: 190.21.2.0
+        aliases:
+          - ${APP_NAME}_db
+
+  # PHP API 8.4
+  api:
+    container_name: ${APP_NAME}_api
+    user: "1000:1000"
+
+    build:
+      context: docker-compose/php
+      dockerfile: Dockerfile
+    image: php:8.4-fpm
+    restart: on-failure
+    ports:
+      - "9000:9000"
+    environment:
+      - DB_HOST=${APP_NAME}_db
+      - DB_PORT=3306
+      - DB_DATABASE=${MYSQL_DATABASE}
+      - DB_USERNAME=${MYSQL_USER}
+      - DB_PASSWORD=${MYSQL_PASSWORD}
+    volumes:
+      - ./${DIR_API}:/var/www/html
+    depends_on:
+      - db
+    networks:
+      net:
+        ipv4_address: 190.21.2.1
+        aliases:
+          - ${APP_NAME}_api
+    working_dir: /var/www/html
+
+  # NGINX
+  nginx:
+    container_name: ${APP_NAME}_nginx
+    image: nginx:stable-alpine
+    restart: on-failure
+    ports:
+      - "8000:80"
+    volumes:
+      - ./${DIR_API}:/var/www/html
+      - ./docker-compose/nginx/conf.d:/etc/nginx/conf.d/
+    depends_on:
+      - api
+    networks:
+      net:
+        ipv4_address: 190.21.2.2
+        aliases:
+          - ${APP_NAME}_nginx
+
+  # COBRO-FACIL-APP
+  app:
+    container_name: ${APP_NAME}_app
+    user: "1000:1000"  # Añade esta línea para evitar problemas de permisos
+    build:
+      context: docker-compose/node
+      dockerfile: Dockerfile
+    image: node:22-alpine
+    restart: on-failure
+    working_dir: /var/www/html/app
+    ports:
+      - 3001:3001
+    volumes:
+      - ./${DIR_APP}/:/var/www/html/app
+    tty: true
+    networks:
+      net:
+        ipv4_address: 190.21.2.3
+        aliases:
+          - ${APP_NAME}_app
+
+networks:
+  net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${NET_IP}
