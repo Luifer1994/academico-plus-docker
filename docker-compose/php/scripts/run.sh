@@ -50,4 +50,69 @@ else
 fi
 
 echo ">> Ambiente Iniciado Correctamente."
+
+# Matar cualquier proceso queue:work existente
+if [ -f /var/www/html/storage/logs/queue.pid ]; then
+  if [ -n "$(cat /var/www/html/storage/logs/queue.pid)" ]; then
+    echo " > Deteniendo worker anterior..."
+    kill -9 $(cat /var/www/html/storage/logs/queue.pid) 2>/dev/null || true
+  fi
+  rm /var/www/html/storage/logs/queue.pid
+fi
+
+# Iniciar worker en segundo plano y guardar su PID
+echo " > Iniciando worker de colas en segundo plano..."
+nohup php artisan queue:work --queue=high,default,low --sleep=3 --tries=3 --timeout=90 > /var/www/html/storage/logs/queue-worker.log 2>&1 &
+QUEUE_PID=$!
+echo $QUEUE_PID > /var/www/html/storage/logs/queue.pid
+echo " > Worker iniciado con PID: $QUEUE_PID"
+
+# Monitorear el worker periódicamente
+(
+  while true; do
+    sleep 60  # Verificar cada minuto
+    if ! kill -0 $QUEUE_PID 2>/dev/null; then
+      echo " > Worker detenido. Reiniciando..." >> /var/www/html/storage/logs/queue-monitor.log
+      nohup php artisan queue:work --queue=high,default,low --sleep=3 --tries=3 --timeout=90 >> /var/www/html/storage/logs/queue-worker.log 2>&1 &
+      QUEUE_PID=$!
+      echo $QUEUE_PID > /var/www/html/storage/logs/queue.pid
+      echo " > Worker reiniciado con PID: $QUEUE_PID" >> /var/www/html/storage/logs/queue-monitor.log
+    fi
+  done
+) &
+
+# Iniciar PHP-FPM en primer plano (el proceso principal)
+echo " > Iniciando PHP-FPM..."
+# Matar cualquier proceso queue:work existente
+if [ -f /var/www/html/storage/logs/queue.pid ]; then
+  if [ -n "$(cat /var/www/html/storage/logs/queue.pid)" ]; then
+    echo " > Deteniendo worker anterior..."
+    kill -9 $(cat /var/www/html/storage/logs/queue.pid) 2>/dev/null || true
+  fi
+  rm /var/www/html/storage/logs/queue.pid
+fi
+
+# Iniciar worker en segundo plano y guardar su PID
+echo " > Iniciando worker de colas en segundo plano..."
+nohup php artisan queue:work --queue=high,default,low --sleep=3 --tries=3 --timeout=90 > /var/www/html/storage/logs/queue-worker.log 2>&1 &
+QUEUE_PID=$!
+echo $QUEUE_PID > /var/www/html/storage/logs/queue.pid
+echo " > Worker iniciado con PID: $QUEUE_PID"
+
+# Monitorear el worker periódicamente
+(
+  while true; do
+    sleep 60  # Verificar cada minuto
+    if ! kill -0 $QUEUE_PID 2>/dev/null; then
+      echo " > Worker detenido. Reiniciando..." >> /var/www/html/storage/logs/queue-monitor.log
+      nohup php artisan queue:work --queue=high,default,low --sleep=3 --tries=3 --timeout=90 >> /var/www/html/storage/logs/queue-worker.log 2>&1 &
+      QUEUE_PID=$!
+      echo $QUEUE_PID > /var/www/html/storage/logs/queue.pid
+      echo " > Worker reiniciado con PID: $QUEUE_PID" >> /var/www/html/storage/logs/queue-monitor.log
+    fi
+  done
+) &
+
+# Iniciar PHP-FPM en primer plano (el proceso principal)
+echo " > Iniciando PHP-FPM..."
 exec php-fpm
